@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Milkminder IOFC & alimenti — HTML standalone</title>
+<style>
+    :root {
+        --bg: #0f0f12;
+        --panel: #1a1d22;
+        --accent: #2f7cf0;
+        --text: #eaeef5;
+        --muted: #a9b1c1;
+        --good: #2ecc71;
+        --warn: #f39c12;
+        --bad:  #e74c3c;
+        --grid: #2a2e35;
+    }
+    body {
+        margin: 0; padding: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial;
+        background: radial-gradient(1200px 700px at 10% 10%, #13151a, var(--bg));
+        color: var(--text);
+    }
+    header { padding: 24px; border-bottom: 1px solid var(--grid); }
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.3px; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+    .panel {
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.0));
+        border: 1px solid var(--grid); border-radius: 12px; padding: 16px;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+    }
+    .panel h2 { margin: 0 0 12px; font-size: 18px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { font-size: 13px; color: var(--muted); }
+    input, select {
+        width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--grid);
+        background: #13161b; color: var(--text);
+    }
+    .row { display: grid; grid-template-columns: 140px 1fr 1fr 1fr 1fr 1fr; gap: 8px; align-items: center; }
+    .row label { display: block; font-size: 12px; }
+    .btnbar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+    button {
+        background: var(--accent); color: white; border: none; padding: 10px 14px; border-radius: 10px;
+        cursor: pointer; font-weight: 600; letter-spacing: 0.2px;
+    }
+    .secondary { background: #2b3340; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--grid); padding: 10px; text-align: right; }
+    th { text-align: left; font-size: 13px; color: var(--muted); }
+    .metric { display: grid; grid-template-columns: 2fr 1fr; border-bottom: 1px solid var(--grid); padding: 8px 0; }
+    .metric span.key { color: var(--muted); font-size: 13px; }
+    .metric span.val { font-weight: 700; }
+    .ok { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+    footer { padding: 12px 16px; color: var(--muted); border-top: 1px solid var(--grid); }
+    @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+    <h1>Milkminder — Calcolatore latte, alimenti, IOFC (solo HTML)</h1>
+</header>
+
+<main>
+    <section class="panel">
+        <h2>Dati latte e mandria</h2>
+        <div class="grid">
+            <div>
+                <label>Giorni nel mese</label>
+                <input type="number" step="1" min="1" id="days" placeholder="es. 31" />
+            </div>
+            <div>
+                <label>Latte venduto (L)</label>
+                <input type="number" step="0.01" min="0" id="milk_sold" placeholder="litri da fattura" />
+            </div>
+            <div>
+                <label>Latte non consegnato (L)</label>
+                <input type="number" step="0.01" min="0" id="milk_not" placeholder="vitelli/uso interno" />
+            </div>
+            <div>
+                <label>Importo fattura (€)</label>
+                <input type="number" step="0.01" min="0" id="invoice_eur" placeholder="totale valore latte" />
+            </div>
+            <div>
+                <label>Vacche in latte a fine mese (n°)</label>
+                <input type="number" step="1" min="0" id="cows_in_milk" placeholder="n° vacche in lattazione" />
+            </div>
+            <div>
+                <label>Vacche totali a fine mese (n°)</label>
+                <input type="number" step="1" min="0" id="cows_end_month" placeholder="opzionale se disponibile" />
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Razione (media giornaliera)</h2>
+        <div class="grid" style="grid-template-columns: 1fr;">
+            <div id="feedRows"></div>
+            <div class="btnbar">
+                <button type="button" class="secondary" id="addRow">+ Aggiungi riga</button>
+                <button type="button" class="secondary" id="removeRow">− Rimuovi riga</button>
+                <button type="button" id="calcBtn">Calcola</button>
+                <button type="button" class="secondary" id="clearAll">Pulisci tutto</button>
+                <button type="button" class="secondary" id="exportJSON">Esporta JSON</button>
+                <button type="button" class="secondary" id="importJSON">Importa JSON</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Risultati principali</h2>
+        <div id="results">
+            <!-- metriche renderizzate via JS -->
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Dettaglio alimenti (calcoli per voce)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th style="text-align:right;">N° capi</th>
+                    <th style="text-align:right;">Kg/capo/giorno</th>
+                    <th style="text-align:right;">SS</th>
+                    <th style="text-align:right;">€/ton</th>
+                    <th style="text-align:right;">Kg/giorno mandria</th>
+                    <th style="text-align:right;">Kg SS/giorno</th>
+                    <th style="text-align:right;">Kg/mese</th>
+                    <th style="text-align:right;">Kg SS/mese</th>
+                    <th style="text-align:right;">€ mese</th>
+                </tr>
+            </thead>
+            <tbody id="detailBody">
+                <tr><td colspan="10" style="text-align:center; color:var(--muted);">Nessun alimento inserito.</td></tr>
+            </tbody>
+            <tfoot id="detailFoot">
+                <tr>
+                    <th style="text-align:left;">Totali</th>
+                    <th></th><th></th><th></th><th></th>
+                    <th id="tot_daily_asfed">0</th>
+                    <th id="tot_daily_dm">0</th>
+                    <th id="tot_monthly_asfed">0</th>
+                    <th id="tot_monthly_dm">0</th>
+                    <th id="tot_monthly_cost">0</th>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+</main>
+
+<footer>
+    Inserisci i dati reali, premi “Calcola”. Nessun dato d’esempio viene mostrato o salvato. Tutto avviene localmente nel browser.
+</footer>
+
+<script>
+(function(){
+    const feedRows = document.getElementById('feedRows');
+    const addRowBtn = document.getElementById('addRow');
+    const removeRowBtn = document.getElementById('removeRow');
+    const calcBtn = document.getElementById('calcBtn');
+    const clearAllBtn = document.getElementById('clearAll');
+    const exportBtn = document.getElementById('exportJSON');
+    const importBtn = document.getElementById('importJSON');
+
+    let rows = 10;
+    renderRows();
+
+    addRowBtn.addEventListener('click', () => { rows++; renderRows(); });
+    removeRowBtn.addEventListener('click', () => { rows = Math.max(0, rows - 1); renderRows(); });
+    clearAllBtn.addEventListener('click', clearAll);
+    calcBtn.addEventListener('click', calculate);
+    exportBtn.addEventListener('click', exportJSON);
+    importBtn.addEventListener('click', importJSON);
+
+    function renderRows() {
+        feedRows.innerHTML = '';
+        for (let i = 0; i < rows; i++) {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.innerHTML = `
+                <div>
+                    <label>Tipo</label>
+                    <select id="type_${i}">
+                        <option value="">—</option>
+                        <option value="concentrato">Concentrato</option>
+                        <option value="foraggio">Foraggio</option>
+                        <option value="altro">Altro</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Kg/capo/giorno (as-fed)</label>
+                    <input type="number" step="0.001" min="0" id="kgphd_${i}" />
+                </div>
+                <div>
+                    <label>Prezzo (€/ton)</label>
+                    <input type="number" step="0.01" min="0" id="priceT_${i}" />
+                </div>
+                <div>
+                    <label>Sostanza secca (SS)</label>
+                    <input type="number" step="0.01" min="0" id="dm_${i}" placeholder="0.88 o 88" />
+                </div>
+                <div>
+                    <label>N° capi in razione</label>
+                    <input type="number" step="1" min="0" id="heads_${i}" />
+                </div>
+                <div style="text-align:right;">
+                    <label>&nbsp;</label>
+                    <button type="button" class="secondary" onclick="(function(){clearRow(${i});})();">Pulisci</button>
+                </div>
+            `;
+            feedRows.appendChild(row);
+        }
+    }
+
+    window.clearRow = function(i) {
+        const ids = [`type_${i}`, `kgphd_${i}`, `priceT_${i}`, `dm_${i}`, `heads_${i}`];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'SELECT') el.selectedIndex = 0;
+            else el.value = '';
+        });
+    };
+
+    function num(id) {
+        const el = document.getElementById(id);
+        if (!el) return 0;
+        const v = parseFloat(el.value);
+        return isFinite(v) ? v : 0;
+    }
+    function text(id) {
+        const el = document.getElementById(id);
+        return el ? (el.value || '').trim() : '';
+    }
+    function fnum(v, dec=2) {
+        if (!isFinite(v)) return '';
+        return new Intl.NumberFormat('it-IT', {minimumFractionDigits: dec, maximumFractionDigits: dec}).format(v);
+    }
+
+    function normalizeDM(dmRaw) {
+        if (!isFinite(dmRaw)) return 0;
+        if (dmRaw > 1) return dmRaw / 100.0;
+        return dmRaw;
+    }
+
+    function calculate() {
+        const days = num('days');
+        const milk_sold = num('milk_sold');
+        const milk_not = num('milk_not');
+        const invoice_eur = num('invoice_eur');
+        const cows_in_milk = num('cows_in_milk');
+        const cows_end_month = num('cows_end_month');
+
+        const feedItems = [];
+        for (let i = 0; i < rows; i++) {
+            const type = (text(`type_${i}`) || '').toLowerCase();
+            const kgphd = num(`kgphd_${i}`);
+            const priceT = num(`priceT_${i}`);
+            const dm = normalizeDM(num(`dm_${i}`));
+            const heads = num(`heads_${i}`);
+            const isEmpty = (!type && kgphd === 0 && priceT === 0 && dm === 0 && heads === 0);
+            if (isEmpty) continue;
+
+            // calcoli voce
+            const daily_asfed = kgphd * heads;
+            const daily_dm    = daily_asfed * dm;
+            const monthly_asfed = daily_asfed * days;
+            const monthly_dm    = daily_dm * days;
+            const monthly_cost  = (monthly_asfed / 1000) * priceT;
+
+            feedItems.push({
+                type, kgphd, priceT, dm, heads,
+                daily_asfed, daily_dm, monthly_asfed, monthly_dm, monthly_cost
+            });
+        }
+
+        const milk_total = milk_sold + milk_not;
+        const price_per_L_sold = milk_sold > 0 ? (invoice_eur / milk_sold) : 0;
+        const price_per_L_produced = milk_total > 0 ? (invoice_eur / milk_total) : 0;
+
+        let daily_asfed_total = 0, daily_dm_total = 0, monthly_asfed_total = 0, monthly_dm_total = 0, monthly_cost_total = 0;
+        let conc_monthly_kg = 0, conc_monthly_cost = 0;
+
+        feedItems.forEach(it => {
+            daily_asfed_total += it.daily_asfed;
+            daily_dm_total    += it.daily_dm;
+            monthly_asfed_total += it.monthly_asfed;
+            monthly_dm_total    += it.monthly_dm;
+            monthly_cost_total  += it.monthly_cost;
+            const isConc = (it.type === 'concentrato' || it.type === 'concentrati');
+            if (isConc) {
+                conc_monthly_kg   += it.monthly_asfed;
+                conc_monthly_cost += it.monthly_cost;
+            }
+        });
+
+        const conc_monthly_ton = conc_monthly_kg / 1000;
+        const conc_eur_per_ton = conc_monthly_ton > 0 ? (conc_monthly_cost / conc_monthly_ton) : 0;
+        const L_per_kgSS = monthly_dm_total > 0 ? (milk_total / monthly_dm_total) : 0;
+        const eur_per_L = price_per_L_sold;
+
+        const iofc_month = invoice_eur - monthly_cost_total;
+        const iofc_per_cow_month = cows_in_milk > 0 ? (iofc_month / cows_in_milk) : 0;
+        const iofc_per_cow_day = (cows_in_milk > 0 && days > 0) ? (iofc_month / cows_in_milk / days) : 0;
+        const iofc_per_L = milk_sold > 0 ? (iofc_month / milk_sold) : 0;
+
+        const L_per_cow_day = (cows_in_milk > 0 && days > 0) ? (milk_sold / cows_in_milk / days) : 0;
+        const L_per_cow_month = cows_in_milk > 0 ? (milk_sold / cows_in_milk) : 0;
+
+        renderResults({
+            milk_total, invoice_eur, price_per_L_sold, price_per_L_produced,
+            cows_end_month, cows_in_milk, monthly_dm_total, L_per_kgSS,
+            monthly_cost_total, conc_monthly_ton, conc_eur_per_ton,
+            iofc_month, iofc_per_cow_month, iofc_per_cow_day, iofc_per_L,
+            L_per_cow_day, L_per_cow_month,
+            daily_asfed_total, daily_dm_total, monthly_asfed_total, monthly_dm_total,
+            monthly_cost_total,
+        });
+        renderDetails(feedItems, {
+            daily_asfed_total, daily_dm_total, monthly_asfed_total, monthly_dm_total, monthly_cost_total
+        });
+    }
+
+    function renderResults(r) {
+        const res = document.getElementById('results');
+        const cls = r.iofc_month >= 0 ? 'ok' : 'bad';
+        res.innerHTML = `
+            <div class="metric"><span class="key">Totale latte prodotto (L)</span><span class="val">${fnum(r.milk_total, 2)}</span></div>
+            <div class="metric"><span class="key">Totale valore latte (€)</span><span class="val">${fnum(r.invoice_eur, 2)}</span></div>
+            <div class="metric"><span class="key">Prezzo €/L (su venduto)</span><span class="val">${fnum(r.price_per_L_sold, 4)}</span></div>
+            <div class="metric"><span class="key">Prezzo €/L (su prodotto)</span><span class="val">${fnum(r.price_per_L_produced, 4)}</span></div>
+            <div class="metric"><span class="key">Vacche totali a fine mese (n°)</span><span class="val">${fnum(r.cows_end_month, 0)}</span></div>
+            <div class="metric"><span class="key">Vacche in latte a fine mese (n°)</span><span class="val">${fnum(r.cows_in_milk, 0)}</span></div>
+            <div class="metric"><span class="key">Totale kg SS (mese)</span><span class="val">${fnum(r.monthly_dm_total, 2)}</span></div>
+            <div class="metric"><span class="key">Litri / kg SS</span><span class="val">${fnum(r.L_per_kgSS, 4)}</span></div>
+            <div class="metric"><span class="key">Totale € alimenti (mese)</span><span class="val">${fnum(r.monthly_cost_total, 2)}</span></div>
+            <div class="metric"><span class="key">Totale concentrati (t/mese)</span><span class="val">${fnum(r.conc_monthly_ton, 3)}</span></div>
+            <div class="metric"><span class="key">€/ton (concentrati, ponderato)</span><span class="val">${fnum(r.conc_eur_per_ton, 2)}</span></div>
+            <div class="metric"><span class="key">€/L (latte venduto)</span><span class="val">${fnum(r.price_per_L_sold, 4)}</span></div>
+            <div class="metric"><span class="key">IOFC mandria / mese (€)</span><span class="val ${cls}">${fnum(r.iofc_month, 2)}</span></div>
+            <div class="metric"><span class="key">IOFC / capo / mese (€)</span><span class="val">${fnum(r.iofc_per_cow_month, 2)}</span></div>
+            <div class="metric"><span class="key">IOFC / capo / giorno (€)</span><span class="val">${fnum(r.iofc_per_cow_day, 3)}</span></div>
+            <div class="metric"><span class="key">IOFC / litro (€)</span><span class="val">${fnum(r.iofc_per_L, 4)}</span></div>
+            <div class="metric"><span class="key">Litri di latte / capo / giorno</span><span class="val">${fnum(r.L_per_cow_day, 3)}</span></div>
+            <div class="metric"><span class="key">Litri di latte / capo / mese</span><span class="val">${fnum(r.L_per_cow_month, 2)}</span></div>
+        `;
+        // Totali in tfoot
+        document.getElementById('tot_daily_asfed').textContent   = fnum(r.daily_asfed_total, 2);
+        document.getElementById('tot_daily_dm').textContent      = fnum(r.daily_dm_total, 2);
+        document.getElementById('tot_monthly_asfed').textContent = fnum(r.monthly_asfed_total, 2);
+        document.getElementById('tot_monthly_dm').textContent    = fnum(r.monthly_dm_total, 2);
+        document.getElementById('tot_monthly_cost').textContent  = fnum(r.monthly_cost_total, 2);
+    }
+
+    function renderDetails(items, totals) {
+        const body = document.getElementById('detailBody');
+        if (!items.length) {
+            body.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--muted);">Nessun alimento inserito.</td></tr>`;
+            return;
+        }
+        body.innerHTML = items.map(d => `
+            <tr>
+                <td style="text-align:left;">${capitalize(d.type)}</td>
+                <td>${fnum(d.heads, 0)}</td>
+                <td>${fnum(d.kgphd, 3)}</td>
+                <td>${fnum(d.dm, 3)}</td>
+                <td>${fnum(d.priceT, 2)}</td>
+                <td>${fnum(d.daily_asfed, 2)}</td>
+                <td>${fnum(d.daily_dm, 2)}</td>
+                <td>${fnum(d.monthly_asfed, 2)}</td>
+                <td>${fnum(d.monthly_dm, 2)}</td>
+                <td>${fnum(d.monthly_cost, 2)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function clearAll() {
+        ['days','milk_sold','milk_not','invoice_eur','cows_in_milk','cows_end_month']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        for (let i = 0; i < rows; i++) clearRow(i);
+        document.getElementById('results').innerHTML = '';
+        document.getElementById('detailBody').innerHTML =
+            '<tr><td colspan="10" style="text-align:center; color:var(--muted);">Nessun alimento inserito.</td></tr>';
+        document.getElementById('tot_daily_asfed').textContent = '0';
+        document.getElementById('tot_daily_dm').textContent = '0';
+        document.getElementById('tot_monthly_asfed').textContent = '0';
+        document.getElementById('tot_monthly_dm').textContent = '0';
+        document.getElementById('tot_monthly_cost').textContent = '0';
+    }
+
+    function exportJSON() {
+        const data = {
+            days: document.getElementById('days').value,
+            milk_sold: document.getElementById('milk_sold').value,
+            milk_not: document.getElementById('milk_not').value,
+            invoice_eur: document.getElementById('invoice_eur').value,
+            cows_in_milk: document.getElementById('cows_in_milk').value,
+            cows_end_month: document.getElementById('cows_end_month').value,
+            rows: rows,
+            feed: []
+        };
+        for (let i = 0; i < rows; i++) {
+            data.feed.push({
+                type: document.getElementById(`type_${i}`)?.value || '',
+                kgphd: document.getElementById(`kgphd_${i}`)?.value || '',
+                priceT: document.getElementById(`priceT_${i}`)?.value || '',
+                dm: document.getElementById(`dm_${i}`)?.value || '',
+                heads: document.getElementById(`heads_${i}`)?.value || '',
+            });
+        }
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'milkminder_iofc.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    function importJSON() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.onchange = () => {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const data = JSON.parse(reader.result);
+                    if (data.rows && Number.isFinite(data.rows)) {
+                        rows = data.rows;
+                        renderRows();
+                    }
+                    ['days','milk_sold','milk_not','invoice_eur','cows_in_milk','cows_end_month'].forEach(id => {
+                        if (data[id] !== undefined) document.getElementById(id).value = data[id];
+                    });
+                    if (Array.isArray(data.feed)) {
+                        for (let i = 0; i < Math.min(rows, data.feed.length); i++) {
+                            const f = data.feed[i];
+                            const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+                            set(`type_${i}`, f.type || '');
+                            set(`kgphd_${i}`, f.kgphd || '');
+                            set(`priceT_${i}`, f.priceT || '');
+                            set(`dm_${i}`, f.dm || '');
+                            set(`heads_${i}`, f.heads || '');
+                        }
+                    }
+                } catch (e) {
+                    alert('File JSON non valido.');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
+
+    function capitalize(s) { return (s||'').charAt(0).toUpperCase() + (s||'').slice(1); }
+})();
+</script>
+</body>
+</html>
